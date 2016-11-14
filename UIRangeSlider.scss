@@ -1,0 +1,102 @@
+.InputRange {
+  cursor: pointer;
+  height: rem($InputRange-slider-height);
+  position: relative;
+  width: 100%;
+}
+
+.InputRange-slider {
+  appearance: none;
+  background: $InputRange-slider-background;
+  border: $InputRange-slider-border;
+  border-radius: 100%;
+  cursor: pointer;
+  display: block;
+  height: rem($InputRange-slider-height);
+  margin-left: rem($InputRange-slider-width) / -2;
+  margin-top: rem($InputRange-slider-height) / -2 + rem($InputRange-track-height) / -2;
+  outline: none;
+  position: absolute;
+  top: 50%;
+  transition: $InputRange-slider-transition;
+  width: rem($InputRange-slider-width);
+
+  &:focus {
+    box-shadow: 0 0 0 5px transparentize($InputRange-slider-background, 0.8);
+    outline: none;
+  }
+
+  .InputRange.is-disabled & {
+    background: $InputRange-slider--is-disabled-background;
+    border: $InputRange-slider--is-disabled-border;
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+.InputRange-slider--active {
+  transform: $InputRange-slider--active-transform;
+}
+
+.InputRange-sliderContainer {
+  transition: $InputRange-sliderContainer-transition;
+}
+
+.InputRange-track {
+  background: $InputRange-track-background;
+  border-radius: rem($InputRange-track-height);
+  display: block;
+  height: rem($InputRange-track-height);
+  position: relative;
+  transition: $inputRange-track-transition;
+
+  .InputRange.is-disabled & {
+    background: $InputRange-track--is-disabled-background;
+  }
+}
+
+.InputRange-track--container {
+  left: 0;
+  margin-top: -0.5 * rem($InputRange-track-height);
+  position: absolute;
+  right: 0;
+  top: 50%;
+}
+
+.InputRange-track--active {
+  background: $InputRange-track--active-background;
+}
+
+.InputRange-labelContainer {
+  left: -50%;
+  position: relative;
+
+  .InputRange-label--max & {
+    left: 50%;
+  }
+}
+
+.InputRange-label {
+  color: $InputRange-label-color;
+  font-size: rem(12px);
+  white-space: nowrap;
+}
+
+.InputRange-label--min,
+.InputRange-label--max {
+  bottom: rem(-22px);
+  position: absolute;
+}
+
+.InputRange-label--min {
+  left: 0;
+}
+
+.InputRange-label--max {
+  right: 0;
+}
+
+.InputRange-label--value {
+  position: absolute;
+  top: rem(-28px);
+}

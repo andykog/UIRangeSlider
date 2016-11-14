@@ -3,7 +3,6 @@
  */
 
 import React from 'react';
-import { autobind } from './util';
 
 /**
  * Get the CSS styles for an active track
@@ -31,15 +30,12 @@ function getActiveTrackStyle(track) {
  * @param {Object} props - React component props
  */
 export default class Track extends React.Component {
-  constructor(props) {
-    super(props);
 
-    // Auto-bind
-    autobind([
-      'handleMouseDown',
-      'handleTouchStart',
-    ], this);
-  }
+  propTypes = {
+    children: React.PropTypes.node,
+    onTrackMouseDown: React.PropTypes.func.isRequired,
+    percentages: React.PropTypes.objectOf(React.PropTypes.number).isRequired,
+  };
 
   /**
    * Return the clientRect of the component
@@ -56,7 +52,7 @@ export default class Track extends React.Component {
    * Handle any mousedown event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleMouseDown(event) {
+  handleMouseDown = (event) => {
     const trackClientRect = this.clientRect;
     const { clientX } = event.touches ? event.touches[0] : event;
     const position = {
@@ -65,17 +61,17 @@ export default class Track extends React.Component {
     };
 
     this.props.onTrackMouseDown(event, this, position);
-  }
+  };
 
   /**
    * Handle any touchstart event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleTouchStart(event) {
+  handleTouchStart = (event) => {
     event.preventDefault();
 
     this.handleMouseDown(event);
-  }
+  };
 
   /**
    * Render method of the component
@@ -83,35 +79,21 @@ export default class Track extends React.Component {
    */
   render() {
     const activeTrackStyle = getActiveTrackStyle(this);
-    const classNames = this.props.classNames;
 
     return (
       <div
-        className={ classNames.trackContainer }
-        onMouseDown={ this.handleMouseDown }
-        onTouchStart={ this.handleTouchStart }
-        ref="track">
+        className="InputRange-track InputRange-track--container"
+        onMouseDown={this.handleMouseDown}
+        onTouchStart={this.handleTouchStart}
+        ref="track"
+      >
         <div
           style={ activeTrackStyle }
-          className={ classNames.trackActive }>
+          className="InputRange-track InputRange-track--active"
+        >
         </div>
-        { this.props.children }
+        {this.props.children}
       </div>
     );
   }
 }
-
-/**
- * Accepted propTypes of Track
- * @static {Object}
- * @property {Function} children
- * @property {Function} classNames
- * @property {Function} onTrackMouseDown
- * @property {Function} percentages
- */
-Track.propTypes = {
-  children: React.PropTypes.node,
-  classNames: React.PropTypes.objectOf(React.PropTypes.string),
-  onTrackMouseDown: React.PropTypes.func.isRequired,
-  percentages: React.PropTypes.objectOf(React.PropTypes.number).isRequired,
-};

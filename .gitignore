@@ -1,9 +1,0 @@
-.DS_Store
-*.log
-/bower_components
-/build
-/coverage
-/example/build
-/lib
-/node_modules
-/out

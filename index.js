@@ -3,12 +3,10 @@
  */
 
 import React from 'react';
+import classNames from 'classnames';
 import Slider from './Slider';
-import Track from './Track';
-import Label from './Label';
-import defaultClassNames from './defaultClassNames';
 import valueTransformer from './valueTransformer';
-import { autobind, captialize, distanceTo, isDefined, isObject, length } from './util';
+import { captialize, distanceTo, isDefined, isObject, length } from './util';
 import { maxMinValuePropType } from './propTypes';
 
 /**
@@ -77,49 +75,6 @@ function shouldUpdate(inputRange, values) {
 }
 
 /**
- * Get the owner document of inputRange
- * @private
- * @param {InputRange} inputRange - React component
- * @return {Document} Document
- */
-function getDocument(inputRange) {
-  const { inputRange: { ownerDocument } } = inputRange.refs;
-
-  return ownerDocument;
-}
-
-/**
- * Get the class name(s) of inputRange based on its props
- * @private
- * @param {InputRange} inputRange - React component
- * @return {string} A list of class names delimited with spaces
- */
-function getComponentClassName(inputRange) {
-  const { props } = inputRange;
-
-  if (!props.disabled) {
-    return props.classNames.component;
-  }
-
-  return `${props.classNames.component} is-disabled`;
-}
-
-/**
- * Get the key name of a slider
- * @private
- * @param {InputRange} inputRange - React component
- * @param {Slider} slider - React component
- * @return {string} Key name
- */
-function getKeyFromSlider(inputRange, slider) {
-  if (slider === inputRange.refs.sliderMin) {
-    return 'min';
-  }
-
-  return 'max';
-}
-
-/**
  * Get all slider keys of inputRange
  * @private
  * @param {InputRange} inputRange - React component
@@ -133,28 +88,6 @@ function getKeys(inputRange) {
   return ['max'];
 }
 
-/**
- * Get the key name of a slider that's the closest to a point
- * @private
- * @param {InputRange} inputRange - React component
- * @param {Point} position - x/y
- * @return {string} Key name
- */
-function getKeyByPosition(inputRange, position) {
-  const values = valueTransformer.valuesFromProps(inputRange);
-  const positions = valueTransformer.positionsFromValues(inputRange, values);
-
-  if (inputRange.isMultiValue) {
-    const distanceToMin = distanceTo(position, positions.min);
-    const distanceToMax = distanceTo(position, positions.max);
-
-    if (distanceToMin < distanceToMax) {
-      return 'min';
-    }
-  }
-
-  return 'max';
-}
 
 /**
  * Get an array of slider HTML for rendering
@@ -163,7 +96,6 @@ function getKeyByPosition(inputRange, position) {
  * @return {Array.<string>} Array of HTML
  */
 function renderSliders(inputRange) {
-  const { classNames } = inputRange.props;
   const sliders = [];
   const keys = getKeys(inputRange);
   const values = valueTransformer.valuesFromProps(inputRange);
@@ -186,17 +118,18 @@ function renderSliders(inputRange) {
       <Slider
         ariaLabelledby={ inputRange.props.ariaLabelledby }
         ariaControls={ inputRange.props.ariaControls }
-        classNames={ classNames }
         formatLabel={ inputRange.formatLabel }
         key={ key }
         maxValue={ maxValue }
         minValue={ minValue }
         onSliderKeyDown={ inputRange.handleSliderKeyDown }
-        onSliderMouseMove={ inputRange.handleSliderMouseMove }
+        onSliderKeyUp={ inputRange.handleSliderKeyUp }
         percentage={ percentage }
         ref={ ref }
         type={ key }
-        value={ value } />
+        value={ value }
+        active={key === inputRange.state.activeKey}
+      />
     );
 
     sliders.push(slider);
@@ -233,27 +166,47 @@ function renderHiddenInputs(inputRange) {
  * @param {Object} props - React component props
  */
 export default class InputRange extends React.Component {
+
+  static propTypes = {
+    ariaLabelledby: React.PropTypes.string,
+    ariaControls: React.PropTypes.string,
+    defaultValue: maxMinValuePropType,
+    disabled: React.PropTypes.bool,
+    formatLabel: React.PropTypes.func,
+    labelPrefix: React.PropTypes.string,
+    labelSuffix: React.PropTypes.string,
+    maxValue: maxMinValuePropType,
+    minValue: maxMinValuePropType,
+    name: React.PropTypes.string,
+    onChange: React.PropTypes.func.isRequired,
+    onChangeComplete: React.PropTypes.func,
+    step: React.PropTypes.number,
+    value: maxMinValuePropType,
+    plusInfinity: React.PropTypes.bool,
+    minusInfinity: React.PropTypes.bool,
+  };
+
+  static defaultProps = {
+    defaultValue: 0,
+    disabled: false,
+    labelPrefix: '',
+    labelSuffix: '',
+    maxValue: 10,
+    minValue: 0,
+    step: 1,
+    value: null,
+    formatLabel: label => label,
+  };
+
+  state = {
+    activeKey: undefined
+  };
+
   constructor(props) {
     super(props);
 
     // Private
     internals.set(this, {});
-
-    // Auto-bind
-    autobind([
-      'formatLabel',
-      'handleInteractionEnd',
-      'handleInteractionStart',
-      'handleKeyDown',
-      'handleKeyUp',
-      'handleMouseDown',
-      'handleMouseUp',
-      'handleSliderKeyDown',
-      'handleSliderMouseMove',
-      'handleTouchStart',
-      'handleTouchEnd',
-      'handleTrackMouseDown',
-    ], this);
   }
 
   /**
@@ -264,7 +217,7 @@ export default class InputRange extends React.Component {
     const { track } = this.refs;
 
     if (track) {
-      return track.clientRect;
+      return track.getBoundingClientRect();
     }
 
     return {
@@ -282,6 +235,42 @@ export default class InputRange extends React.Component {
   get isMultiValue() {
     return isObject(this.props.value) ||
            isObject(this.props.defaultValue);
+  }
+
+  /**
+   * Get the key name of a slider that's the closest to a event clientX
+   * @private
+   * @param {InputRange} inputRange - React component
+   * @param {Point} position - x/y
+   * @return {string} Key name
+   */
+  getKeyFromEvent(event) {
+    const { clientX } = event.touches ? event.touches[0] : event;
+    var position = {
+      x: clientX - this.trackClientRect.left,
+      y: 0
+    };
+    const values = valueTransformer.valuesFromProps(this);
+    const positions = valueTransformer.positionsFromValues(this, values);
+
+    if (this.isMultiValue) {
+      const distanceToMin = distanceTo(position, positions.min);
+      const distanceToMax = distanceTo(position, positions.max);
+
+      if (distanceToMin < distanceToMax) {
+        return 'min';
+      }
+    }
+
+    return 'max';
+  }
+
+  getKeyFromSlider(slider) {
+    if (slider === this.refs.sliderMin) {
+      return 'min';
+    }
+
+    return 'max';
   }
 
   /**
@@ -341,9 +330,9 @@ export default class InputRange extends React.Component {
     }
 
     if (this.isMultiValue) {
-      this.props.onChange(this, values);
+      this.props.onChange(values);
     } else {
-      this.props.onChange(this, values.max);
+      this.props.onChange(values.max);
     }
   }
 
@@ -374,7 +363,7 @@ export default class InputRange extends React.Component {
    * @param {number} labelValue - Label value
    * @return {string} Formatted label value
    */
-  formatLabel(labelValue) {
+  formatLabel = (labelValue) => {
     const { formatLabel, labelPrefix, labelSuffix } = this.props;
 
     if (formatLabel) {
@@ -382,35 +371,20 @@ export default class InputRange extends React.Component {
     }
 
     return `${labelPrefix}${labelValue}${labelSuffix}`;
-  }
-
-  /**
-   * Handle any mousemove event received by the slider
-   * @param {SyntheticEvent} event - User event
-   * @param {Slider} slider - React component
-   */
-  handleSliderMouseMove(event, slider) {
-    if (this.props.disabled) {
-      return;
-    }
-
-    const key = getKeyFromSlider(this, slider);
-    const position = valueTransformer.positionFromEvent(this, event);
-
-    this.updatePosition(key, position);
-  }
+  };
 
   /**
    * Handle any keydown event received by the slider
    * @param {SyntheticEvent} event - User event
    * @param {Slider} slider - React component
    */
-  handleSliderKeyDown(event, slider) {
+  handleSliderKeyDown = (event, slider) => {
+    this.handleInteractionStart();
     if (this.props.disabled) {
       return;
     }
 
-    const key = getKeyFromSlider(this, slider);
+    const key = this.getKeyFromSlider(slider);
 
     switch (event.keyCode) {
     case KeyCode.LEFT_ARROW:
@@ -428,31 +402,18 @@ export default class InputRange extends React.Component {
     default:
       break;
     }
-  }
+  };
 
-  /**
-   * Handle any mousedown event received by the track
-   * @param {SyntheticEvent} event - User event
-   * @param {Slider} slider - React component
-   * @param {Point} position - Mousedown position
-   */
-  handleTrackMouseDown(event, track, position) {
-    if (this.props.disabled) {
-      return;
-    }
+  handleSliderKeyUp = (event, slider) => {
+    this.handleInteractionEnd();
+  };
 
-    event.preventDefault();
-
-    const key = getKeyByPosition(this, position);
-
-    this.updatePosition(key, position);
-  }
 
   /**
    * Handle the start of any user-triggered event
    * @param {SyntheticEvent} event - User event
    */
-  handleInteractionStart() {
+  handleInteractionStart = () => {
     const _this = internals.get(this);
 
     if (!this.props.onChangeComplete || isDefined(_this.startValue)) {
@@ -460,13 +421,13 @@ export default class InputRange extends React.Component {
     }
 
     _this.startValue = this.props.value || this.props.defaultValue;
-  }
+  };
 
   /**
    * Handle the end of any user-triggered event
    * @param {SyntheticEvent} event - User event
    */
-  handleInteractionEnd() {
+  handleInteractionEnd = () => {
     const _this = internals.get(this);
 
     if (!this.props.onChangeComplete || !isDefined(_this.startValue)) {
@@ -478,178 +439,137 @@ export default class InputRange extends React.Component {
     }
 
     _this.startValue = null;
-  }
+  };
 
   /**
-   * Handle any keydown event received by the component
+   * Handle any click event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleKeyDown(event) {
-    this.handleInteractionStart(event);
-  }
-
-  /**
-   * Handle any keyup event received by the component
-   * @param {SyntheticEvent} event - User event
-   */
-  handleKeyUp(event) {
-    this.handleInteractionEnd(event);
-  }
+  handleClick = (event) => {
+    event.preventDefault();
+  };
 
   /**
    * Handle any mousedown event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleMouseDown(event) {
-    const document = getDocument(this);
-
-    this.handleInteractionStart(event);
-
+  handleMouseDown = (event) => {
+    this.handleInteractionStart();
+    event.preventDefault();
+    const activeKey = this.getKeyFromEvent(event);
+    this.setState({ activeKey });
+    const position = valueTransformer.positionFromEvent(this, event);
+    this.updatePosition(activeKey, position);
+    this.refs[`slider${captialize(activeKey)}`].focus();
+    document.addEventListener('mousemove', this.handleMouseMove);
     document.addEventListener('mouseup', this.handleMouseUp);
-  }
+  };
 
   /**
    * Handle any mouseup event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleMouseUp(event) {
-    const document = getDocument(this);
-
-    this.handleInteractionEnd(event);
-
+  handleMouseUp = () => {
+    this.setState({ activeKey: undefined });
+    document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('mouseup', this.handleMouseUp);
-  }
+    this.handleInteractionEnd();
+  };
+
+  /**
+   * Handle any mousemove event received by the component
+   * @param {SyntheticEvent} event - User event
+   */
+  handleMouseMove = (event) => {
+    if (this.props.disabled) {
+      return;
+    }
+    if (!this.state.activeKey) {
+      return;
+    }
+    event.preventDefault();
+    const position = valueTransformer.positionFromEvent(this, event);
+    this.updatePosition(this.state.activeKey, position);
+  };
 
   /**
    * Handle any touchstart event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleTouchStart(event) {
-    const document = getDocument(this);
-
-    this.handleInteractionStart(event);
-
+  handleTouchStart = (event) => {
+    this.handleInteractionStart();
+    event.preventDefault();
+    document.addEventListener('touchmove', this.handleTouchMove);
     document.addEventListener('touchend', this.handleTouchEnd);
-  }
+  };
+
+  /**
+   * Handle any touchmove event received by the component
+   * @param {SyntheticEvent} event - User event
+   */
+  handleTouchMove = (event) => {
+    this.handleMouseMove(event);
+  };
 
   /**
    * Handle any touchend event received by the component
    * @param {SyntheticEvent} event - User event
    */
-  handleTouchEnd(event) {
-    const document = getDocument(this);
-
-    this.handleInteractionEnd(event);
-
+  handleTouchEnd = (event) => {
+    event.preventDefault();
+    this.setState({ activeKey: undefined });
+    document.removeEventListener('touchmove', this.handleTouchMove);
     document.removeEventListener('touchend', this.handleTouchEnd);
-  }
+    this.handleInteractionEnd();
+  };
+
 
   /**
    * Render method of the component
    * @return {string} Component JSX
    */
   render() {
-    const { classNames } = this.props;
-    const componentClassName = getComponentClassName(this);
     const values = valueTransformer.valuesFromProps(this);
     const percentages = valueTransformer.percentagesFromValues(this, values);
+
+    const width = `${(percentages.max - percentages.min) * 100}%`;
+    const left = `${percentages.min * 100}%`;
 
     return (
       <div
         aria-disabled={ this.props.disabled }
         ref="inputRange"
-        className={ componentClassName }
-        onKeyDown={ this.handleKeyDown }
-        onKeyUp={ this.handleKeyUp }
+        className={classNames('InputRange', this.props.disabled && 'is-disabled')}
+
         onMouseDown={ this.handleMouseDown }
-        onTouchStart={ this.handleTouchStart }>
-        <Label
-          className={ classNames.labelMin }
-          containerClassName={ classNames.labelContainer }
-          formatLabel={ this.formatLabel }>
-          { this.props.minValue }
-        </Label>
+        onTouchStart={ this.handleTouchStart }
+      >
+        <span className="InputRange-label InputRange-label--min">
+          <span className="InputRange-labelContainer">
+            {this.props.formatLabel ? this.props.formatLabel(this.props.minValue) : this.props.minValue}
+          </span>
+        </span>
 
-        <Track
-          classNames={ classNames }
+        <div
+          className="InputRange-track InputRange-track--container"
           ref="track"
-          percentages={ percentages }
-          onTrackMouseDown={ this.handleTrackMouseDown }>
+        >
+          <div
+            style={{ width, left }}
+            className="InputRange-track InputRange-track--active"
+          >
+          </div>
+          {renderSliders(this)}
+        </div>
 
-          { renderSliders(this) }
-        </Track>
-
-        <Label
-          className={ classNames.labelMax }
-          containerClassName={ classNames.labelContainer }
-          formatLabel={ this.formatLabel }>
-          { this.props.maxValue }
-        </Label>
+        <span className="InputRange-label InputRange-label--max">
+          <span className="InputRange-labelContainer">
+            {this.props.formatLabel(this.props.maxValue)}
+          </span>
+        </span>
 
         { renderHiddenInputs(this) }
       </div>
     );
   }
 }
-
-/**
- * Accepted propTypes of InputRange
- * @static {Object}
- * @property {Function} ariaLabelledby
- * @property {Function} ariaControls
- * @property {Function} classNames
- * @property {Function} defaultValue
- * @property {Function} disabled
- * @property {Function} formatLabel
- * @property {Function} labelPrefix
- * @property {Function} labelSuffix
- * @property {Function} maxValue
- * @property {Function} minValue
- * @property {Function} name
- * @property {Function} onChange
- * @property {Function} onChangeComplete
- * @property {Function} step
- * @property {Function} value
- */
-InputRange.propTypes = {
-  ariaLabelledby: React.PropTypes.string,
-  ariaControls: React.PropTypes.string,
-  classNames: React.PropTypes.objectOf(React.PropTypes.string),
-  defaultValue: maxMinValuePropType,
-  disabled: React.PropTypes.bool,
-  formatLabel: React.PropTypes.func,
-  labelPrefix: React.PropTypes.string,
-  labelSuffix: React.PropTypes.string,
-  maxValue: maxMinValuePropType,
-  minValue: maxMinValuePropType,
-  name: React.PropTypes.string,
-  onChange: React.PropTypes.func.isRequired,
-  onChangeComplete: React.PropTypes.func,
-  step: React.PropTypes.number,
-  value: maxMinValuePropType,
-};
-
-/**
- * Default props of InputRange
- * @static {Object}
- * @property {Object.<string, string>} defaultClassNames
- * @property {Range|number} defaultValue
- * @property {boolean} disabled
- * @property {string} labelPrefix
- * @property {string} labelSuffix
- * @property {number} maxValue
- * @property {number} minValue
- * @property {number} step
- * @property {Range|number} value
- */
-InputRange.defaultProps = {
-  classNames: defaultClassNames,
-  defaultValue: 0,
-  disabled: false,
-  labelPrefix: '',
-  labelSuffix: '',
-  maxValue: 10,
-  minValue: 0,
-  step: 1,
-  value: null,
-};
